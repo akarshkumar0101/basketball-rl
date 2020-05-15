@@ -38,7 +38,8 @@ def raw_accuracy(pos_op, pos_base=constant.pos_hoop):
     pos_base should be of shape (..., 2)
     pos_op and pos_base should be broadcastable to each other. """
     r = distance(pos_op, pos_base)
-    accuracy = 1/torch.exp(r)
+    accuracy = torch.exp(-r**2) # guassian is be better for closer shots
+#     accuracy = 1/torch.exp(r)
     return accuracy
 
 
@@ -48,7 +49,7 @@ def raw_points(pos_op, pos_base=constant.pos_hoop):
     pos_base should be of shape (..., 2)
     pos_op and pos_base should be broadcastable to each other. """
     r = distance(pos_op, pos_base)
-    point_scale = 2 + 1 / (1 + torch.exp(-50 * (r-0.9)))
+    point_scale = 2 + 1 / (1 + torch.exp(-50 * (r-constant.radius_three_point_line)))
     return point_scale
 
 
@@ -95,8 +96,12 @@ def points_per_possession(pos_op, pos_dp, pos_base=constant.pos_hoop):
     
     # points per possession
     no_contest_ppp = raw_accuracy(pos_op, pos_base) * raw_points(pos_op, pos_base)
-    contest_coeff = contest(pos_op, pos_dp, pos_base)
-    contest_coeff = contest_coeff.prod(dim=-1)[..., None] # all dps contest all ops
+    
+    if pos_dp is None:
+        contest_coeff = 1.0
+    else:
+        contest_coeff = contest(pos_op, pos_dp, pos_base)
+        contest_coeff = contest_coeff.prod(dim=-1)[..., None] # all dps contest all ops
     return contest_coeff * no_contest_ppp
 
 

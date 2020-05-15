@@ -29,7 +29,8 @@ def show_game_state(game_state, ax=None):
         circle = plt.Circle((x, y), radius=constant.radius_ball, color='orange')
         ax.add_artist(circle)
     
-    ax.add_artist(plt.Circle(constant.pos_hoop.numpy(), radius=0.1, color='orange', fill=False))
+    ax.add_artist(plt.Circle(constant.pos_hoop.numpy(), radius=constant.radius_hoop, color='orange', fill=False))
+    ax.add_artist(plt.Circle(constant.pos_hoop.numpy(), radius=constant.radius_three_point_line, color='orange', fill=False))
     
     ax.set_title('Game State')
     ax.set_xlabel('X-axis')
@@ -46,7 +47,8 @@ def show_game_animation(all_game_states, fps=10):
     for ax in axs:
         ax.set_xlim(-1, 1)
         ax.set_ylim(-1, 1)
-        ax.add_artist(plt.Circle(constant.pos_hoop.numpy(), radius=0.1, color='orange', fill=False))
+        ax.add_artist(plt.Circle(constant.pos_hoop.numpy(), radius=constant.radius_hoop, color='orange', fill=False))
+        ax.add_artist(plt.Circle(constant.pos_hoop.numpy(), radius=constant.radius_three_point_line, color='orange', fill=False))
         
         entities = []
         for _ in constant.idxs_op.numpy():
