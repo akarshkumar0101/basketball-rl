@@ -9,13 +9,18 @@ def run_simulation(model_o, model_d, init_game_state, with_grad=False, return_al
         all_game_states = [init_game_state]
 
     current_game_state = init_game_state
+    
+    batch_size = init_game_state.shape[0]
+    
     with torch.set_grad_enabled(with_grad):
         
         if pbar is not None:
             pbar.reset(total=constant.num_game_steps-1)
         for game_step in range(constant.num_game_steps-1):
-            move_o = model_o(current_game_state)
-            move_d = model_d(current_game_state)
+            tss = (game_step/(constant.num_game_steps-2)) * torch.ones(batch_size, 1, 1)
+            
+            move_o = model_o(current_game_state, tss)
+            move_d = model_d(current_game_state, tss)
 
             current_game_state = current_game_state.clone()
             current_game_state[:, constant.idxs_oentities, :] += move_o

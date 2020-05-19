@@ -19,10 +19,14 @@ def get_dense_layers(num_features):
 class OffenseModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.main = get_dense_layers([11*2, 100, 100, 6*2])
-
-    def forward(self, X):
+        self.main = get_dense_layers([11*2+1, 100, 100, 6*2])
+        
+    def forward(self, X, tss):
+        """
+        X has shape (-1, 11, 2). tss has shape (-1, 1, 1) representing timestamps.
+        """
         X = X.view(-1, 11*2)
+        X = torch.cat((X, tss[..., 0]), dim=1)
         X = self.main(X)
         X = X.view(-1, 6, 2)
         X[:, constant.idxs_op, :] = 0.3 * torch.tanh(X[:, constant.idxs_op, :])
@@ -32,13 +36,17 @@ class OffenseModel(torch.nn.Module):
 class DefenseModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.main = get_dense_layers([11*2, 100, 100, 5*2])
+        self.main = get_dense_layers([11*2+1, 100, 100, 5*2])
 
-    def forward(self, X):
+    def forward(self, X, tss):
+        """
+        X has shape (-1, 11, 2). tss has shape (-1, 1, 1) representing timestamps.
+        """
         X = X.view(-1, 11*2)
+        X = torch.cat((X, tss[..., 0]), dim=1)
         X = self.main(X)
         X = X.view(-1, 5, 2)
         X = 0.3 * torch.tanh(X)
         return X
 
-
+    
