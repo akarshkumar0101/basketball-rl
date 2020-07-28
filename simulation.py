@@ -20,12 +20,18 @@ def run_simulation(model_o, model_d, init_game_state, with_grad=False, return_al
             tss = (game_step/(constant.num_game_steps-2)) * torch.ones(batch_size, 1, 1)
             
             move_o = model_o(current_game_state, tss)
+            move_op = constant.speed_player * move_o[:, :-1]
+            move_ball = constant.speed_ball * move_o[:, -1:]
             move_d = model_d(current_game_state, tss)
+            move_dp = constant.speed_player * move_d
 
             current_game_state = current_game_state.clone()
-            current_game_state[:, constant.idxs_oentities, :] += move_o
-            current_game_state[:, constant.idxs_dp, :] += move_d
-            current_game_state = current_game_state.clamp(-1, 1)
+            
+            current_game_state[:, constant.idxs_op, :] += move_op
+            current_game_state[:, constant.idxs_ball, :] += move_ball 
+            current_game_state[:, constant.idxs_dp, :] += move_dp
+            
+#             current_game_state = current_game_state.clamp(-1, 1)
             
             if return_all_game_states:
                 all_game_states.append(current_game_state)

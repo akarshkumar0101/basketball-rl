@@ -19,6 +19,10 @@ fps = 10
 duration = 5
 num_game_steps = fps * duration
 
+#speeds are per frame
+speed_ball = 1.0
+speed_player = 0.5
+
 radius_player = 0.03
 radius_ball = 0.02
 
