@@ -21,7 +21,7 @@ speed_ball = 1.0
 speed_player = 0.5
 
 radius_player = 0.03
-radius_ball = 0.02
+radius_ball = 0.015
 
 radius_three_point_line = 0.83
 radius_hoop = 0.04
