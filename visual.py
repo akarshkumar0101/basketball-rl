@@ -8,7 +8,7 @@ import constant
 
 def show_game_state(game_state, ax=None):
     if ax is None:
-        fig, ax = plt.subplots(figsize=(8,8)) # note we must use plt.subplots, not plt.subplot
+        fig, ax = plt.subplots(figsize=(8, 8)) # note we must use plt.subplots, not plt.subplot
     # (or if you have an existing figure)
 #     fig = plt.gcf()
 #     ax = fig.gca()

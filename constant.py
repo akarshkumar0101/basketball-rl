@@ -12,9 +12,6 @@ idxs_ball = torch.tensor([10]).to(device)
 
 idxs_oentities = torch.cat((idxs_op, idxs_ball)).to(device)
 
-
-
-
 fps = 10
 duration = 5
 num_game_steps = fps * duration
