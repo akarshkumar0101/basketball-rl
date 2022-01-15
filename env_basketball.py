@@ -11,6 +11,8 @@ import pymunk
 
 import matplotlib.pyplot as plt
 
+from ppp.ppp_hc import PPPHC
+
 # from gym import error, spaces, utils
 # from gym.utils import seeding
 
@@ -32,13 +34,8 @@ class Player:
 # 7.62
 
 
-class PPPHC:
-    def __init__(self, env):
-        self.env = env
+        
 
-    def evaluate_ppp(self, env=None):
-        if env is None:
-            env = self.env
 
 
 class BasketballEnv(gym.Env):
@@ -56,7 +53,8 @@ class BasketballEnv(gym.Env):
             "pos_hoop": [0, 6.477],
             "out_of_bounds": [-7.62, -7.62, 7.62, 7.62],  # m
             "boundary": [-9.144, -9.144, 9.144, 9.144],  # m
-            "distance_three_point": 6.33,  # m
+            "distance_3_point": 6.33,  # m
+            "thickness_3_point": 1.0,  # m
             "radius_ball": 0.12,  # m
             "radius_hoop": 0.31,  # m
             "use_segment_walls": False,
@@ -297,6 +295,7 @@ class BasketballEnv(gym.Env):
                     label="Offense" if i == 0 else None,
                 )
                 ax.add_artist(circle)
+                ax.text(x, y, player.name)
             for i, (player, (x, y)) in enumerate(zip(self.players_defense, xy_defense)):
                 circle = plt.Circle(
                     (x, y),
@@ -305,6 +304,7 @@ class BasketballEnv(gym.Env):
                     label="Defense" if i == 0 else None,
                 )
                 ax.add_artist(circle)
+                ax.text(x, y, player.name)
             for x, y in [self.get_pos_ball(state["ball_state"])]:
                 circle = plt.Circle(
                     (x, y), radius=self.config["radius_ball"], color="orange"
@@ -328,7 +328,7 @@ class BasketballEnv(gym.Env):
         ax.add_artist(
             plt.Circle(
                 np.array(self.config["pos_hoop"]),
-                radius=self.config["distance_three_point"],
+                radius=self.config["distance_3_point"],
                 color="k",
                 fill=False,
                 label="3-point line",
