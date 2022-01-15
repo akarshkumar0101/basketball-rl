@@ -63,22 +63,54 @@ class BasketballEnv(gym.Env):
         wall = pymunk.Body(0, 0, pymunk.Body.STATIC)
         b = self.boundary
         bthick = 2
-        if self.config['use_segment_walls']:
-            # the thickness that is fed into the segment is *display* thickness for a matplotlib line
+        if self.config["use_segment_walls"]:
+            # the thickness that is fed into the segment is (.5 times) the *display* thickness for the matplotlib line
             # not sure, but don't think that this is a simulation thickness
             walls = [
-                pymunk.Segment(wall, (-b, -b), (-b, b), bthick*10),
-                pymunk.Segment(wall, (-b, b), (b, b), bthick*10),
-                pymunk.Segment(wall, (b, b), (b, -b), bthick*10),
-                pymunk.Segment(wall, (b, -b), (-b, -b), bthick*10),
+                pymunk.Segment(wall, (-b, -b), (-b, b), bthick * 10),
+                pymunk.Segment(wall, (-b, b), (b, b), bthick * 10),
+                pymunk.Segment(wall, (b, b), (b, -b), bthick * 10),
+                pymunk.Segment(wall, (b, -b), (-b, -b), bthick * 10),
             ]
         else:
             overlap = 1.3
             walls = [
-                pymunk.Poly(wall, [(-b*overlap, -b), (b*overlap, -b), (-b*overlap, -b-bthick), (b*overlap, -b-bthick)]), # bottom
-                pymunk.Poly(wall, [(-b*overlap, b), (b*overlap, b), (-b*overlap, b+bthick), (b*overlap, b+bthick)]), # top
-                pymunk.Poly(wall, [(-b, -b*overlap), (-b, b*overlap), (-b-bthick, -b*overlap), (-b-bthick, b*overlap)]), # left
-                pymunk.Poly(wall, [(b, -b*overlap), (b, b*overlap), (b+bthick, -b*overlap), (b+bthick, b*overlap)]), # right
+                pymunk.Poly(
+                    wall,
+                    [
+                        (-b * overlap, -b),
+                        (b * overlap, -b),
+                        (-b * overlap, -b - bthick),
+                        (b * overlap, -b - bthick),
+                    ],
+                ),  # bottom
+                pymunk.Poly(
+                    wall,
+                    [
+                        (-b * overlap, b),
+                        (b * overlap, b),
+                        (-b * overlap, b + bthick),
+                        (b * overlap, b + bthick),
+                    ],
+                ),  # top
+                pymunk.Poly(
+                    wall,
+                    [
+                        (-b, -b * overlap),
+                        (-b, b * overlap),
+                        (-b - bthick, -b * overlap),
+                        (-b - bthick, b * overlap),
+                    ],
+                ),  # left
+                pymunk.Poly(
+                    wall,
+                    [
+                        (b, -b * overlap),
+                        (b, b * overlap),
+                        (b + bthick, -b * overlap),
+                        (b + bthick, b * overlap),
+                    ],
+                ),  # right
             ]
         self.space.add(wall, *walls)
 
@@ -87,7 +119,7 @@ class BasketballEnv(gym.Env):
 
         self.done = False
 
-        def add_body_to_space(mass, radius):
+        def add_body_to_space(mass, radius, offense=True):
             xy = tuple(np.random.uniform(-7.5, 7.5, size=2).astype(np.float32))
             moment = pymunk.moment_for_circle(mass, 0, radius, (0, 0))
             body = pymunk.Body(mass, moment)
@@ -96,6 +128,7 @@ class BasketballEnv(gym.Env):
             shape = pymunk.Circle(body, radius)
             shape.elasticity = 0.9999999
             self.space.add(body, shape)
+            shape.color = (0, 255, 0, 100) if offense else (255, 0, 0, 100)
             return body
 
         self.stats_offense = [
@@ -106,11 +139,11 @@ class BasketballEnv(gym.Env):
         ]
 
         self.bodies_offense = [
-            add_body_to_space(player.stats["mass"], player.stats["radius"])
+            add_body_to_space(player.stats["mass"], player.stats["radius"], True)
             for player in self.stats_offense
         ]
         self.bodies_defense = [
-            add_body_to_space(player.stats["mass"], player.stats["radius"])
+            add_body_to_space(player.stats["mass"], player.stats["radius"], False)
             for player in self.stats_defense
         ]
         self.bodies_players = [*self.bodies_offense, *self.bodies_defense]
@@ -174,7 +207,7 @@ class BasketballEnv(gym.Env):
 
         if state is None:
             state = self.state
-        
+
         plt.sca(ax)
 
         # (or if you have an existing figure)
@@ -182,11 +215,25 @@ class BasketballEnv(gym.Env):
 
         if backend == "manual":
             # for x, y in state.locs_offense:
-            for player, (x, y) in zip(self.stats_offense, state.locs_offense):
-                circle = plt.Circle((x, y), radius=player.stats["radius"], color="g")
+            for i, (player, (x, y)) in enumerate(
+                zip(self.stats_offense, state.locs_offense)
+            ):
+                circle = plt.Circle(
+                    (x, y),
+                    radius=player.stats["radius"],
+                    color="g",
+                    label="Offense" if i == 0 else None,
+                )
                 ax.add_artist(circle)
-            for player, (x, y) in zip(self.stats_defense, state.locs_defense):
-                circle = plt.Circle((x, y), radius=player.stats["radius"], color="r")
+            for i, (player, (x, y)) in enumerate(
+                zip(self.stats_defense, state.locs_defense)
+            ):
+                circle = plt.Circle(
+                    (x, y),
+                    radius=player.stats["radius"],
+                    color="r",
+                    label="Defense" if i == 0 else None,
+                )
                 ax.add_artist(circle)
             for x, y in [state.loc_ball]:
                 circle = plt.Circle(
@@ -194,26 +241,29 @@ class BasketballEnv(gym.Env):
                 )
                 ax.add_artist(circle)
 
-            ax.add_artist(
-                plt.Circle(
-                    np.array(self.config["pos_hoop"]),
-                    radius=self.config["radius_hoop"],
-                    color="orange",
-                    fill=False,
-                )
-            )
-            ax.add_artist(
-                plt.Circle(
-                    np.array(self.config["pos_hoop"]),
-                    radius=self.config["distance_three_point"],
-                    color="k",
-                    fill=False,
-                )
-            )
         elif backend == "pymunk":
             # TODO: currently only supports the current state of env
             o = pymunk.matplotlib_util.DrawOptions(ax)
             self.space.debug_draw(o)
+
+        ax.add_artist(
+            plt.Circle(
+                np.array(self.config["pos_hoop"]),
+                radius=self.config["radius_hoop"],
+                color="orange",
+                fill=False,
+                label="hoop",
+            )
+        )
+        ax.add_artist(
+            plt.Circle(
+                np.array(self.config["pos_hoop"]),
+                radius=self.config["distance_three_point"],
+                color="k",
+                fill=False,
+                label="3-point line",
+            )
+        )
 
         ax.set_xlabel("x")
         ax.set_ylabel("y")
@@ -237,13 +287,13 @@ class BasketballEnv(gym.Env):
             color="purple",
             align="center",
         )
-        # plt.xlim(xmin*1.1, xmax*1.1)
-        # plt.ylim(ymin*1.1, ymax*1.1)
-        plt.xlim(-12, 12)
-        plt.ylim(-12, 12)
+        plt.xlim(xmin * 1.02, xmax * 1.02)
+        plt.ylim(ymin * 1.02, ymax * 1.02)
+        # plt.xlim(-12, 12)
+        # plt.ylim(-12, 12)
         ax.set_aspect("equal")
         # plt.grid()
-        plt.legend()
+        # plt.legend()
 
         return ax
 
