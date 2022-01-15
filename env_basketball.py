@@ -2,6 +2,7 @@ import numpy as np
 import gym
 
 import json
+import copy
 
 import celluloid
 from IPython.display import HTML  # to show the animation in Jupyter
@@ -31,6 +32,15 @@ class Player:
 # 7.62
 
 
+class PPPHC:
+    def __init__(self, env):
+        self.env = env
+
+    def evaluate_ppp(self, env=None):
+        if env is None:
+            env = self.env
+
+
 class BasketballEnv(gym.Env):
     metadata = {"render.modes": ["human"]}
 
@@ -39,7 +49,7 @@ class BasketballEnv(gym.Env):
         # self.config = json.load(f)
         self.config = {
             "fps": 10,
-            "shot_clock": 24,
+            "shot_clock_max": 24.0,
             "n_offensive_players": 5,
             "n_defensive_players": 5,
             "init_pos_players": "random",
@@ -115,7 +125,6 @@ class BasketballEnv(gym.Env):
         self.space.add(wall, *walls)
 
         self.shot_clock = 0.0
-        self.shot_clock_max = 24.0
 
         self.done = False
 
@@ -131,35 +140,84 @@ class BasketballEnv(gym.Env):
             shape.color = (0, 255, 0, 100) if offense else (255, 0, 0, 100)
             return body
 
-        self.stats_offense = [
-            Player(f"i") for i in range(self.config["n_offensive_players"])
-        ]
-        self.stats_defense = [
-            Player(f"i") for i in range(self.config["n_defensive_players"])
-        ]
+        self.players_offense = []
+        for i in range(self.config["n_offensive_players"]):
+            player = Player(f"O{i}")
+            player.body = add_body_to_space(
+                player.stats["mass"],
+                player.stats["radius"],
+                offense=True,
+            )
+            self.players_offense.append(player)
 
-        self.bodies_offense = [
-            add_body_to_space(player.stats["mass"], player.stats["radius"], True)
-            for player in self.stats_offense
-        ]
-        self.bodies_defense = [
-            add_body_to_space(player.stats["mass"], player.stats["radius"], False)
-            for player in self.stats_defense
-        ]
-        self.bodies_players = [*self.bodies_offense, *self.bodies_defense]
+        self.players_defense = []
+        for i in range(self.config["n_defensive_players"]):
+            player = Player(f"D{i}")
+            player.body = add_body_to_space(
+                player.stats["mass"],
+                player.stats["radius"],
+                offense=False,
+            )
+            self.players_defense.append(player)
 
-        # self.body_ball = add_body_to_space(1.0, 0.02)
-        self.body_ball = 0
-        self.ball_passing = False
+        self.players_all = [*self.players_offense, *self.players_defense]
+
+        # not keeping ball in the pymunk simulation
+        self.ball_state = {
+            "dribbling": True,  # dribbling or passing
+            "dribbler": 0,  # dribbler/passer
+            "receiver": None,
+            "pass_elapsed_time": None,
+            "pass_total_time": None,
+        }
 
         self.action_space = gym.spaces.Discrete(5)
         self.observation_space = gym.spaces.Discrete(2)
+
+        self.ppp = PPPHC(self)
+
+    def evaluate_ppp(self):
+        return self.ppp.evaluate_ppp()
+
+    def get_state(self):
+        state = {}
+        state["shot_clock"] = self.shot_clock
+
+        # player, pos/vel, x/y
+        posvels = np.zeros((len(self.players_all), 2, 2), dtype=np.float32)
+        for i, player in enumerate(self.players_all):
+            posvels[i] = body2pos_vel(player.body)
+        state["posvels"] = posvels
+
+        state["ball_state"] = copy.deepcopy(self.ball_state)
+        return state
+
+    def set_state(self, state):
+        self.shot_clock = state["shot_clock"]
+
+        for i, player in enumerate(self.players_all):
+            player.body.position = tuple(state["posvels"][i][0])
+            player.body.velocity = tuple(state["posvels"][i][1])
+
+        self.ball_state = copy.deepcopy(state["ball_state"])
+
+    def get_pos_ball(self, ball_state=None):
+        if ball_state is None:
+            ball_state = self.ball_state
+
+        if ball_state["dribbling"]:
+            return body2pos_vel(self.players_offense[ball_state["dribbler"]].body)[0]
+        else:
+            a = body2pos_vel(self.players_offense[ball_state["dribbler"]].body)[0]
+            b = body2pos_vel(self.players_offense[ball_state["receiver"]].body)[0]
+            t = ball_state["pass_elapsed_time"] / ball_state["pass_total_time"]
+            return a + (b - a) * t
 
     def reset(self):
         if self.config["init_pos_players"] == "random":
             pass
 
-        self.state = State(self)
+        self.state = self.get_state()
         self.states = [self.state]
 
         return self.state
@@ -173,30 +231,44 @@ class BasketballEnv(gym.Env):
         self.space.step(dt)
         self.shot_clock += dt
 
-        self.done = self.shot_clock >= self.shot_clock_max or action.shooting
+        self.done = (
+            self.shot_clock >= self.config["shot_clock_max"] or action["shooting"]
+        )
 
-        if (
-            type(self.body_ball) is int
-            and type(action.passdata) is int
-            and self.body_ball != action.passdata
-        ):
-            self.body_ball = (self.body_ball, action.passdata, 0.0)
-            self.ball_passing = True
-        elif self.ball_passing:
-            a, b, t = self.body_ball
-            t += 0.1
-            self.body_ball = (a, b, t)
-            if t >= 1.0:
-                self.body_ball = b
-                self.ball_passing = False
+        if self.ball_state["dribbling"]:
+            if (
+                action["passing"]
+                and action["pass_receiver"] is not self.ball_state["dribbler"]
+            ):
+                pass_total_time = 1.0  # TODO: set time based on distance of pass
+                self.ball_state = {
+                    "dribbling": False,
+                    "dribbler": self.ball_state["dribbler"],
+                    "receiver": action["pass_receiver"],
+                    "pass_elapsed_time": 0.0,
+                    "pass_total_time": pass_total_time,
+                }
+        else:  # passing
+            self.ball_state["pass_elapsed_time"] += dt
+            if (
+                self.ball_state["pass_elapsed_time"]
+                > self.ball_state["pass_total_time"]
+            ):
+                self.ball_state = {
+                    "dribbling": True,
+                    "dribbler": self.ball_state["receiver"],
+                    "receiver": None,
+                    "pass_elapsed_time": None,
+                    "pass_total_time": None,
+                }
 
         reward = 0.0
         info = None
 
-        if action.shooting:
+        if action["shooting"]:
             reward = 1.0
 
-        self.state = State(self)
+        self.state = self.get_state()
         self.states.append(self.state)
         return self.state, reward, self.done, info
         # return obs, reward, done, info
@@ -213,11 +285,11 @@ class BasketballEnv(gym.Env):
         # (or if you have an existing figure)
         #     fig, ax = plt.gcf(), fig.gca()
 
+        n_offense, n_defense = len(self.players_offense), len(self.players_defense)
+        xy_offense = state["posvels"][:n_offense, 0, :]
+        xy_defense = state["posvels"][n_offense:, 0, :]
         if backend == "manual":
-            # for x, y in state.locs_offense:
-            for i, (player, (x, y)) in enumerate(
-                zip(self.stats_offense, state.locs_offense)
-            ):
+            for i, (player, (x, y)) in enumerate(zip(self.players_offense, xy_offense)):
                 circle = plt.Circle(
                     (x, y),
                     radius=player.stats["radius"],
@@ -225,9 +297,7 @@ class BasketballEnv(gym.Env):
                     label="Offense" if i == 0 else None,
                 )
                 ax.add_artist(circle)
-            for i, (player, (x, y)) in enumerate(
-                zip(self.stats_defense, state.locs_defense)
-            ):
+            for i, (player, (x, y)) in enumerate(zip(self.players_defense, xy_defense)):
                 circle = plt.Circle(
                     (x, y),
                     radius=player.stats["radius"],
@@ -235,7 +305,7 @@ class BasketballEnv(gym.Env):
                     label="Defense" if i == 0 else None,
                 )
                 ax.add_artist(circle)
-            for x, y in [state.loc_ball]:
+            for x, y in [self.get_pos_ball(state["ball_state"])]:
                 circle = plt.Circle(
                     (x, y), radius=self.config["radius_ball"], color="orange"
                 )
@@ -282,7 +352,7 @@ class BasketballEnv(gym.Env):
         ax.barh(
             y=ymin,
             left=xmin,
-            width=(xmax - xmin) * state.shot_clock / self.config["shot_clock"],
+            width=(xmax - xmin) * state["shot_clock"] / self.config["shot_clock_max"],
             height=(ymax - ymin) * 0.03,
             color="purple",
             align="center",
@@ -341,47 +411,16 @@ class BasketballEnv(gym.Env):
             return fig
 
 
-def get_body_position_numpy(body):
-    return np.array([body.position.x, body.position.y])
+def body2pos_vel(body):
+    return np.stack([np.array(body.position), np.array(body.velocity)])
 
 
-class State:
-    def __init__(self, env):
-        self.shot_clock = env.shot_clock
-
-        if len(env.bodies_offense) > 0:
-            self.locs_offense = np.stack(
-                [get_body_position_numpy(b) for b in env.bodies_offense]
-            ).astype(np.float32)
-        else:
-            self.locs_offense = np.zeros((0, 20)).astype(
-                np.float32
-            )  # don't hardcode 20
-
-        if len(env.bodies_defense) > 0:
-            self.locs_defense = np.stack(
-                [get_body_position_numpy(b) for b in env.bodies_defense]
-            ).astype(np.float32)
-        else:
-            self.locs_defense = np.zeros((0, 20)).astype(
-                np.float32
-            )  # don't hardcode 20
-
-        if type(env.body_ball) is int:
-            self.loc_ball = get_body_position_numpy(
-                env.bodies_offense[env.body_ball]
-            ).astype(np.float32)
-        else:
-            a, b, t = env.body_ball
-            a = get_body_position_numpy(env.bodies_offense[a]).astype(np.float32)
-            b = get_body_position_numpy(env.bodies_offense[b]).astype(np.float32)
-            self.loc_ball = (1 - t) * a + t * b
-
-
-class Action:
-    def __init__(self, env):
-        self.shooting = False
-        self.accs = None
-        self.passdata = np.random.randint(
-            low=0, high=env.config["n_offensive_players"], size=None
-        )
+def get_random_action(env, state):
+    pass_receiver = np.random.randint(low=0, high=len(env.players_offense), size=None)
+    action = {
+        "shooting": False,
+        "accs": None,
+        "passing": True,
+        "pass_receiver": pass_receiver,
+    }
+    return action
