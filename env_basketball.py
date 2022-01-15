@@ -22,7 +22,7 @@ class Player:
             "mass": 83,  # kg
             "speed": 6.7,  # m/s
             "acceleration": 2.95,  # m/s^2, https://www.wired.com/2012/08/maximum-acceleration-in-the-100-m-dash/
-            "speed_ball": 14.6,  # m/s
+            "speed_pass": 14.6,  # m/s
             "radius": 0.27,  # m
         }
 
@@ -41,7 +41,7 @@ class BasketballEnv(gym.Env):
             "fps": 10,
             "shot_clock": 24,
             "n_offensive_players": 5,
-            "n_densive_players": 5,
+            "n_defensive_players": 5,
             "init_pos_players": "random",
             "pos_hoop": [0, 6.477],
             "out_of_bounds": [-7.62, -7.62, 7.62, 7.62],  # m
@@ -49,6 +49,7 @@ class BasketballEnv(gym.Env):
             "distance_three_point": 6.33,  # m
             "radius_ball": 0.12,  # m
             "radius_hoop": 0.31,  # m
+            "use_segment_walls": False,
         }
         if config is not None:
             self.config.update(config)
@@ -60,14 +61,25 @@ class BasketballEnv(gym.Env):
         xmin, ymin, xmax, ymax = self.config["out_of_bounds"]
         self.oob = xmax  # out of bounds
         wall = pymunk.Body(0, 0, pymunk.Body.STATIC)
-        bthick = 0.2
-        b = self.boundary + bthick
-        walls = [
-            pymunk.Segment(wall, (-b, -b), (-b, b), bthick),
-            pymunk.Segment(wall, (-b, b), (b, b), bthick),
-            pymunk.Segment(wall, (b, b), (b, -b), bthick),
-            pymunk.Segment(wall, (b, -b), (-b, -b), bthick),
-        ]
+        b = self.boundary
+        bthick = 2
+        if self.config['use_segment_walls']:
+            # the thickness that is fed into the segment is *display* thickness for a matplotlib line
+            # not sure, but don't think that this is a simulation thickness
+            walls = [
+                pymunk.Segment(wall, (-b, -b), (-b, b), bthick*10),
+                pymunk.Segment(wall, (-b, b), (b, b), bthick*10),
+                pymunk.Segment(wall, (b, b), (b, -b), bthick*10),
+                pymunk.Segment(wall, (b, -b), (-b, -b), bthick*10),
+            ]
+        else:
+            overlap = 1.3
+            walls = [
+                pymunk.Poly(wall, [(-b*overlap, -b), (b*overlap, -b), (-b*overlap, -b-bthick), (b*overlap, -b-bthick)]), # bottom
+                pymunk.Poly(wall, [(-b*overlap, b), (b*overlap, b), (-b*overlap, b+bthick), (b*overlap, b+bthick)]), # top
+                pymunk.Poly(wall, [(-b, -b*overlap), (-b, b*overlap), (-b-bthick, -b*overlap), (-b-bthick, b*overlap)]), # left
+                pymunk.Poly(wall, [(b, -b*overlap), (b, b*overlap), (b+bthick, -b*overlap), (b+bthick, b*overlap)]), # right
+            ]
         self.space.add(wall, *walls)
 
         self.shot_clock = 0.0
@@ -86,11 +98,21 @@ class BasketballEnv(gym.Env):
             self.space.add(body, shape)
             return body
 
-        self.stats_offense = [Player(f"i") for i in range(5)]
-        self.stats_defense = [Player(f"i") for i in range(5)]
+        self.stats_offense = [
+            Player(f"i") for i in range(self.config["n_offensive_players"])
+        ]
+        self.stats_defense = [
+            Player(f"i") for i in range(self.config["n_defensive_players"])
+        ]
 
-        self.bodies_offense = [add_body_to_space(1.0, 0.03) for _ in range(5)]
-        self.bodies_defense = [add_body_to_space(1.0, 0.03) for _ in range(5)]
+        self.bodies_offense = [
+            add_body_to_space(player.stats["mass"], player.stats["radius"])
+            for player in self.stats_offense
+        ]
+        self.bodies_defense = [
+            add_body_to_space(player.stats["mass"], player.stats["radius"])
+            for player in self.stats_defense
+        ]
         self.bodies_players = [*self.bodies_offense, *self.bodies_defense]
 
         # self.body_ball = add_body_to_space(1.0, 0.02)
@@ -146,60 +168,67 @@ class BasketballEnv(gym.Env):
         return self.state, reward, self.done, info
         # return obs, reward, done, info
 
-    def render(self, state=None, mode="human", ax=None):
+    def render(self, state=None, mode="human", backend="manual", ax=None):
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 8))
 
         if state is None:
             state = self.state
+        
+        plt.sca(ax)
 
         # (or if you have an existing figure)
         #     fig, ax = plt.gcf(), fig.gca()
-        ax.set_aspect("equal")
 
-        xmin, ymin, xmax, ymax = self.config["boundary"]
-        ax.set_xlim(xmin, xmax)
-        ax.set_ylim(ymin, ymax)
+        if backend == "manual":
+            # for x, y in state.locs_offense:
+            for player, (x, y) in zip(self.stats_offense, state.locs_offense):
+                circle = plt.Circle((x, y), radius=player.stats["radius"], color="g")
+                ax.add_artist(circle)
+            for player, (x, y) in zip(self.stats_defense, state.locs_defense):
+                circle = plt.Circle((x, y), radius=player.stats["radius"], color="r")
+                ax.add_artist(circle)
+            for x, y in [state.loc_ball]:
+                circle = plt.Circle(
+                    (x, y), radius=self.config["radius_ball"], color="orange"
+                )
+                ax.add_artist(circle)
+
+            ax.add_artist(
+                plt.Circle(
+                    np.array(self.config["pos_hoop"]),
+                    radius=self.config["radius_hoop"],
+                    color="orange",
+                    fill=False,
+                )
+            )
+            ax.add_artist(
+                plt.Circle(
+                    np.array(self.config["pos_hoop"]),
+                    radius=self.config["distance_three_point"],
+                    color="k",
+                    fill=False,
+                )
+            )
+        elif backend == "pymunk":
+            # TODO: currently only supports the current state of env
+            o = pymunk.matplotlib_util.DrawOptions(ax)
+            self.space.debug_draw(o)
+
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+
         xmin, ymin, xmax, ymax = self.config["out_of_bounds"]
         ax.axvline(xmin, c="gray")
         ax.axvline(xmax, c="gray")
         ax.axhline(ymin, c="gray")
         ax.axhline(ymax, c="gray", label="out of bounds")
 
-        # for x, y in state.locs_offense:
-        for player, (x, y) in zip(self.stats_offense, state.locs_offense):
-            circle = plt.Circle((x, y), radius=player.stats["radius"], color="g")
-            ax.add_artist(circle)
-        for player, (x, y) in zip(self.stats_defense, state.locs_defense):
-            circle = plt.Circle((x, y), radius=player.stats["radius"], color="r")
-            ax.add_artist(circle)
-        for x, y in [state.loc_ball]:
-            circle = plt.Circle(
-                (x, y), radius=self.config["radius_ball"], color="orange"
-            )
-            ax.add_artist(circle)
-
-        ax.add_artist(
-            plt.Circle(
-                np.array(self.config["pos_hoop"]),
-                radius=self.config["radius_hoop"],
-                color="orange",
-                fill=False,
-            )
-        )
-        ax.add_artist(
-            plt.Circle(
-                np.array(self.config["pos_hoop"]),
-                radius=self.config["distance_three_point"],
-                color="k",
-                fill=False,
-            )
-        )
-
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-
         xmin, ymin, xmax, ymax = self.config["boundary"]
+        ax.axvline(xmin, c="red")
+        ax.axvline(xmax, c="red")
+        ax.axhline(ymin, c="red")
+        ax.axhline(ymax, c="red", label="boundary")
         ax.barh(
             y=ymin,
             left=xmin,
@@ -208,8 +237,13 @@ class BasketballEnv(gym.Env):
             color="purple",
             align="center",
         )
+        # plt.xlim(xmin*1.1, xmax*1.1)
+        # plt.ylim(ymin*1.1, ymax*1.1)
+        plt.xlim(-12, 12)
+        plt.ylim(-12, 12)
+        ax.set_aspect("equal")
         # plt.grid()
-        # plt.legend()
+        plt.legend()
 
         return ax
 
@@ -220,13 +254,16 @@ class BasketballEnv(gym.Env):
             fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         if states is None:
             states = self.states
+        states = np.array(states)
         if mode in ["vid", "animation", "file"]:
             camera = celluloid.Camera(fig)  # the camera gets the fig we'll plot
             for state in tqdm(states):
                 self.render(state=state, ax=ax)
                 camera.snap()  # the camera takes a snapshot of the plot
                 # ax.clear()
-            animation = camera.animate()  # animation ready
+            animation = camera.animate(
+                interval=(1000 * 1.0 / self.config["fps"])
+            )  # animation ready
             # plt.cla()
             # plt.clf()
             plt.close()
@@ -239,10 +276,13 @@ class BasketballEnv(gym.Env):
             elif mode == "file":
                 animation.save(kwargs["filename"])
                 return animation
-
+        elif mode == "overlay":
+            for state in tqdm(states):
+                self.render(state=state, ax=ax)
+            return fig
         elif mode == "grid":
             nrows, ncols = kwargs["nrows"], kwargs["ncols"]
-            states = np.array(states)[:: (len(states) // (nrows * ncols))]
+            states = states[:: (len(states) // (nrows * ncols))]
             for r in range(nrows):
                 for c in range(ncols):
                     cax = fig.add_subplot(nrows, ncols, r * ncols + c + 1)
@@ -259,12 +299,23 @@ class State:
     def __init__(self, env):
         self.shot_clock = env.shot_clock
 
-        self.locs_offense = np.stack(
-            [get_body_position_numpy(b) for b in env.bodies_offense]
-        ).astype(np.float32)
-        self.locs_defense = np.stack(
-            [get_body_position_numpy(b) for b in env.bodies_defense]
-        ).astype(np.float32)
+        if len(env.bodies_offense) > 0:
+            self.locs_offense = np.stack(
+                [get_body_position_numpy(b) for b in env.bodies_offense]
+            ).astype(np.float32)
+        else:
+            self.locs_offense = np.zeros((0, 20)).astype(
+                np.float32
+            )  # don't hardcode 20
+
+        if len(env.bodies_defense) > 0:
+            self.locs_defense = np.stack(
+                [get_body_position_numpy(b) for b in env.bodies_defense]
+            ).astype(np.float32)
+        else:
+            self.locs_defense = np.zeros((0, 20)).astype(
+                np.float32
+            )  # don't hardcode 20
 
         if type(env.body_ball) is int:
             self.loc_ball = get_body_position_numpy(
@@ -278,7 +329,9 @@ class State:
 
 
 class Action:
-    def __init__(self):
+    def __init__(self, env):
         self.shooting = False
         self.accs = None
-        self.passdata = np.random.randint(low=0, high=5, size=None)
+        self.passdata = np.random.randint(
+            low=0, high=env.config["n_offensive_players"], size=None
+        )
