@@ -14,9 +14,10 @@ Later on, I will incorporate the player statistics as an input.
 
 
 class ProcessPlayerModule(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, n_sins):
         super().__init__()
         self.env = env
+        self.n_sins = n_sins
         # self.seq = nn.Sequential(
         #     nn.Linear(16, 32),
         #     nn.Tanh(),
@@ -32,26 +33,34 @@ class ProcessPlayerModule(nn.Module):
         #     nn.Tanh(),
         #     nn.Linear(20, 10),
         # )
+        
+        # player_idx (one hot) size
+        # team_idx (2), xy (2), vel (2) = 6
+        # n_sins*2*4 for cos, sin of pos and vel
+        n_in = len(self.env.players_all) + 6 + self.n_sins*2*4
         self.seq = nn.Sequential(
-            nn.Linear(6+len(self.env.players_all), 32),
+            nn.Linear(n_in, 50),
             nn.Tanh(),
-            nn.Linear(32, 20),
+            nn.Linear(50, 32),
             nn.Tanh(),
-            nn.Linear(20, 10),
+            nn.Linear(32, 16),
             nn.Tanh(),
-            nn.Linear(10, 6),
+            nn.Linear(16, 10),
         )
 
     def forward(self, x):
         return self.seq(x)
+
 
 class OffenseNet(nn.Module):
     def __init__(self, env):
         super().__init__()
         self.env = env
 
-        self.process_player_module = ProcessPlayerModule(self.env)
-        n_in = 5+6*(len(self.env.players_all)+2)
+        self.n_sins = 10
+
+        self.process_player_module = ProcessPlayerModule(self.env, self.n_sins)
+        n_in = 5 + 10 * (len(self.env.players_all) + 2)
         self.seq = nn.Sequential(
             nn.Linear(n_in, 50),
             nn.Tanh(),
@@ -95,9 +104,21 @@ class OffenseNet(nn.Module):
         p_team[: self.env.config["n_offensive_players"], 0] = 1.0
         p_team[self.env.config["n_defensive_players"] :, 1] = 1.0
         p_idx = torch.eye(len(posvels))
-        p_pos = torch.from_numpy(posvels[:, 0, :]/7.5)
-        p_vel = torch.from_numpy(posvels[:, 1, :]/2.95)
-        player_info = torch.cat([p_team, p_idx, p_pos, p_vel], dim=1)
+
+        # n_players, xy
+        p_pos = torch.from_numpy(posvels[:, 0, :] / 7.5)
+        p_vel = torch.from_numpy(posvels[:, 1, :] / 2.95)
+
+        n_sins = self.n_sins
+        # coefs = torch.logspace(0, 2.5, n_sins)[None, None, :]
+        coefs = torch.arange(1, n_sins+1)[None, None, :]
+        sin_pos = (p_pos[:, :, None] * np.pi / 2.0 * coefs).sin().reshape(-1, 2*n_sins)
+        cos_pos = (p_pos[:, :, None] * np.pi / 2.0 * coefs).cos().reshape(-1, 2*n_sins)
+        sin_vel = (p_vel[:, :, None] * np.pi / 2.0 * coefs).cos().reshape(-1, 2*n_sins)
+        cos_vel = (p_vel[:, :, None] * np.pi / 2.0 * coefs).cos().reshape(-1, 2*n_sins)
+
+        # n_players, xyteamidxvxvy
+        player_info = torch.cat([p_team, p_idx, p_pos, p_vel, sin_pos, cos_pos, sin_vel, cos_vel], dim=1)
         empty_player_input = torch.zeros_like(player_info[[0]])
 
         # pass duration info
