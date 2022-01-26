@@ -23,19 +23,15 @@ class Player:
         self.stats = {
             "height": 1.88,  # m
             "mass": 83,  # kg
-            "speed": 6.7,  # m/s
-            "acceleration": 2.95,  # m/s^2, https://www.wired.com/2012/08/maximum-acceleration-in-the-100-m-dash/
+            "max_speed": 6.7,  # m/s
+            "max_acceleration": 2.95,  # m/s^2, https://www.wired.com/2012/08/maximum-acceleration-in-the-100-m-dash/
             "speed_pass": 14.6,  # m/s
-            "radius": 0.27,  # m
+            "radius": 0.25,  # m # smaller that actual width of .3 bc it is average in all directions
         }
 
 
 # 50 ft -> 2 -> 15.24 m
 # 7.62
-
-
-        
-
 
 
 class BasketballEnv(gym.Env):
@@ -172,10 +168,14 @@ class BasketballEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(5)
         self.observation_space = gym.spaces.Discrete(2)
 
-        self.ppp = PPPHC(self)
+        self.ppp_calc = PPPHC(self)
 
     def evaluate_ppp(self):
-        return self.ppp.evaluate_ppp()
+        ppp = self.ppp_calc.evaluate_ppp()
+        if True or self.ball_state["dribbling"]:  # only if dribbling
+            return ppp
+        else:  # zero if passing
+            return 0.0
 
     def get_state(self):
         state = {}
@@ -199,21 +199,35 @@ class BasketballEnv(gym.Env):
 
         self.ball_state = copy.deepcopy(state["ball_state"])
 
-    def get_pos_ball(self, ball_state=None):
-        if ball_state is None:
-            ball_state = self.ball_state
+    def get_pos_ball(self, state=None):
+        if state is None:
+            state = self.state
+        ball_state = state["ball_state"]
 
         if ball_state["dribbling"]:
-            return body2pos_vel(self.players_offense[ball_state["dribbler"]].body)[0]
+            # body2pos_vel(self.players_offense[ball_state["dribbler"]].body)[0]
+            return state["posvels"][ball_state["dribbler"], 0]
         else:
-            a = body2pos_vel(self.players_offense[ball_state["dribbler"]].body)[0]
-            b = body2pos_vel(self.players_offense[ball_state["receiver"]].body)[0]
+            # a = body2pos_vel(self.players_offense[ball_state["dribbler"]].body)[0]
+            # b = body2pos_vel(self.players_offense[ball_state["receiver"]].body)[0]
+            a = state["posvels"][ball_state["dribbler"], 0]
+            b = state["posvels"][ball_state["receiver"], 0]
             t = ball_state["pass_elapsed_time"] / ball_state["pass_total_time"]
             return a + (b - a) * t
 
     def reset(self):
         if self.config["init_pos_players"] == "random":
-            pass
+            for player in self.players_all:
+                player.body.position = tuple(np.random.uniform(-7.5, 7.5, size=2).astype(np.float32))
+                player.body.velocity = (0, 0)
+            self.ball_state = {
+                "dribbling": True,  # dribbling or passing
+                "dribbler": 0,  # dribbler/passer
+                "receiver": None,
+                "pass_elapsed_time": None,
+                "pass_total_time": None,
+            }
+        
 
         self.state = self.get_state()
         self.states = [self.state]
@@ -225,6 +239,22 @@ class BasketballEnv(gym.Env):
 
     def step(self, action):
         dt = 1.0 / self.config["fps"]
+
+        # inputting the acceleration actions
+        for player, acc in zip(self.players_all, action['accs']):
+            max_acc = player.stats["max_acceleration"]
+            player.body.force = tuple(acc * max_acc * player.body.mass)
+
+        # enforcing max velocity+acceleration
+        for player in self.players_all:
+            vel, force = player.body.velocity, player.body.force
+            mass = player.body.mass
+            max_speed = player.stats["max_speed"]
+            max_force = player.stats["max_acceleration"] * mass
+            if abs(vel) > max_speed:
+                player.body.velocity = vel.scale_to_length(max_speed)
+            if abs(force) > max_force:
+                player.body.force = force.scale_to_length(max_force)
 
         self.space.step(dt)
         self.shot_clock += dt
@@ -271,7 +301,9 @@ class BasketballEnv(gym.Env):
         return self.state, reward, self.done, info
         # return obs, reward, done, info
 
-    def render(self, state=None, mode="human", backend="manual", ax=None):
+    def render(
+        self, state=None, mode="human", backend="manual", ax=None, player_names=False
+    ):
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 8))
 
@@ -295,7 +327,8 @@ class BasketballEnv(gym.Env):
                     label="Offense" if i == 0 else None,
                 )
                 ax.add_artist(circle)
-                ax.text(x, y, player.name)
+                if player_names:
+                    ax.text(x, y, player.name)
             for i, (player, (x, y)) in enumerate(zip(self.players_defense, xy_defense)):
                 circle = plt.Circle(
                     (x, y),
@@ -304,8 +337,9 @@ class BasketballEnv(gym.Env):
                     label="Defense" if i == 0 else None,
                 )
                 ax.add_artist(circle)
-                ax.text(x, y, player.name)
-            for x, y in [self.get_pos_ball(state["ball_state"])]:
+                if player_names:
+                    ax.text(x, y, player.name)
+            for x, y in [self.get_pos_ball(state)]:
                 circle = plt.Circle(
                     (x, y), radius=self.config["radius_ball"], color="orange"
                 )
@@ -419,7 +453,7 @@ def get_random_action(env, state):
     pass_receiver = np.random.randint(low=0, high=len(env.players_offense), size=None)
     action = {
         "shooting": False,
-        "accs": None,
+        "accs": np.random.randn(len(env.players_all), 2),
         "passing": True,
         "pass_receiver": pass_receiver,
     }

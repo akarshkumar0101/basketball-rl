@@ -21,7 +21,8 @@ class PPPHC:
         if env is None:
             env = self.env
         posvels = env.state["posvels"]
-        pos_op = posvels[: len(env.players_offense), 0, :]  # only look at position
+        # only look at position
+        pos_op = posvels[[env.state["ball_state"]["dribbler"]], 0, :]
         pos_dp = posvels[len(env.players_offense) :, 0, :]  # only look at position
 
         pos_op = torch.from_numpy(pos_op)
@@ -32,7 +33,7 @@ class PPPHC:
         # and velocity sideways to hoop is almost always bad, etc.
 
         ppp = self.points_per_possession(pos_op, pos_dp)
-        return ppp
+        return ppp.item()
 
     # general functions
     def distance(self, a, b=None):
@@ -74,10 +75,9 @@ class PPPHC:
         if b is None:
             b = self.pos_hoop
         r = self.distance(a, b)
-        accuracy = torch.exp(
-            -((r / 7.62) ** 2)
-        )  # guassian is be better for closer shots
-        #     accuracy = 1/torch.exp(r)
+        # guassian is be better for closer shots
+        accuracy = torch.exp(-((r / 7.62) ** 2))
+        # accuracy = 1/torch.exp(r)
         return accuracy
 
     def raw_points(self, a, b=None):
@@ -96,13 +96,15 @@ class PPPHC:
     def raw_contest_distance(self, dist):
         """The contest coefficient a player will feel if someone is dist away from them.
         dist can be of any shape."""
-        return 1 - torch.exp(-50 * dist / 7.62)
+        # return 1 - torch.exp(-50 * dist / 7.62/2.)
+        return torch.sigmoid(5.0 * (dist - 1.0))
 
     def raw_contest_angle(self, theta):
         """The contest coefficient a player will feel if someone is theta degrees away from the direction of the.
         theta can be of any shape."""
         high = 0.8
         low = 0.4
+        low = 0.0
         return (torch.cos(theta - np.pi) + 1) / 2.0 * (high - low) + low
 
     def contest(self, x, y, b=None):
@@ -124,9 +126,19 @@ class PPPHC:
         # distance contest on op from dp
         contest_distance = self.raw_contest_distance(r)
         # weight two combination of terms based on distance of dp from op
-        weight = torch.tanh(3 * r / 7.62)
-        return weight * contest_distance + (1 - weight) * contest_directional
-        # return contest_distance
+        weight = torch.tanh(3.0 * r / 7.62)
+        # return contest_distance*contest_directional
+        # return (weight)*contest_directional
+        # TODO: mess around with this equation and find what makes sense
+        # return weight * contest_distance + (1 - weight) * contest_directional*contest_distance
+        # return weight * contest_distance + (1 - weight) * contest_directional
+
+        cos = torch.cos(theta_hoop - theta_defender)
+        cosp = 1 - (cos + 1.0) / 2.0
+        # return cosp
+        # the following is a decay on all sides.
+        # but the back of defender decays more slowly (-.6*cosp)
+        return torch.sigmoid(5.0 * (r - (1.0 - .8 * cosp)))
 
     def points_per_possession(self, x, y, b=None):
         """The points per possession a player at pos_op has with defenders at pos_dp and hoop at pos_base.
@@ -139,11 +151,13 @@ class PPPHC:
 
         # points per possession
         no_contest_ppp = self.raw_accuracy(x, b) * self.raw_points(x, b)
+        # offense shape
 
         if y is None:
             contest_coeff = 1.0
         else:
             contest_coeff = self.contest(x, y, b)
+            # defense shape
             # all dps contest all ops
             contest_coeff = contest_coeff.prod(dim=-1, keepdim=True)
         return contest_coeff * no_contest_ppp
