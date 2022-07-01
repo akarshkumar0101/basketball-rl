@@ -91,6 +91,39 @@ class OffenseNet(nn.Module):
         }
         return action
 
+
+    def posvel_to_fourier(self, posvels):
+        pos = posvels[..., 0, :]
+        vel = posvels[..., 1, :]
+
+        pos_angfreq_max = 2*np.pi/(7.5*4) # recognize scale of court
+        pos_angfreq_min = 2*np.pi/(0.1*4) # recognize scale of .6 ft
+
+        vel_angfreq_max = 2*np.pi/(6.7*4) # recognize scale of max_speed
+        vel_angfreq_min = 2*np.pi/(.2*4) # recognize scale of 1 mph
+
+        # recognize position in scales from
+        # .075 m to 7.5*2 m
+        wavelengths_pos = np.geomspace(.075*2, (7.5*2)*2, num=self.n_sins)
+        # recognize velocity in scales from
+        # .2 m/s to 6.7 m/s
+        wavelengths_vel = np.geomspace(.2*2, 6.7*2, num=self.n_sins)
+
+        # freq = angfreq/2pi
+        # wavelength = 1/freq
+        # freq = angfreq/2pi
+        angfreq_pos = 2*np.pi/wavelengths_pos
+        angfreq_vel = 2*np.pi/wavelengths_vel
+
+
+        sinpos = np.sin(pos[..., :, None]*angfreq_pos).reshape(pos.shape[:-1]+(-1,))
+        cospos = np.cos(pos[..., :, None]*angfreq_pos).reshape(pos.shape[:-1]+(-1,))
+        sinvel = np.sin(vel[..., :, None]*angfreq_vel).reshape(vel.shape[:-1]+(-1,))
+        cosvel = np.cos(vel[..., :, None]*angfreq_vel).reshape(vel.shape[:-1]+(-1,))
+
+        fourier_posvel = np.concatenate([sinpos, cospos, sinvel, cosvel], axis=-1)
+        return fourier_posvel
+
     def calc_nn_input(self, state):
         # time_stamp
         sc = state["shot_clock"]
