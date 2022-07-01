@@ -25,6 +25,6 @@ class Game:
             pbar = tqdm(pbar)
         self.events = [Event(event) for event in pbar]
         self.player_ids_dict = self.events[0].player_ids_dict
-
+        
     def start(self):
         self.event.show()
