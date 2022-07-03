@@ -35,7 +35,6 @@ def load_data_game(game, tqdm=None):
         # data_e = np.array(data_e)
         
         # only add if this new event is different from the previous one
-        
         if len(data_game)==0 or not np.array_equal(data_e, data_game[-1], equal_nan=True):
             data_game.append(data_e)
     return data_game
@@ -52,7 +51,7 @@ def preprocess(data_game):
     
     # sort the times in case they're out of order
     idxs = np.argsort(data_game[0])[::-1]
-    data_game = data_game[:, idxs]
+    data_game = data_game[:, idxs] #don't sort??
     return data_game.T
         
         # break

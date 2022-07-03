@@ -35,3 +35,9 @@ def fourier_pos(tmin, tmax, t=None, d=512, do_viz=False):
         plt.ylim(tmax, tmin)
         plt.show()
     return embed
+
+def sliding_window(n_window, n_total):
+    idxs = []
+    for i in range(n_window):
+        idxs.append(torch.arange(n_total-n_window+1)+i)
+    return torch.stack(idxs).T
