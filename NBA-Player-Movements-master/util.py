@@ -9,16 +9,16 @@ def fourier_pos(tmin, tmax, t=None, d=512, do_viz=False):
     i_even = i[::2]
     i_odd = i[1::2]
     
-    embed = torch.zeros(len(t), d)
+    embed = torch.zeros(*t.shape, d)
     
     wl0 = 2*np.pi *     1 * (tmax-tmin) / 1024
     wl1 = 2*np.pi * 10000 * (tmax-tmin) / 1024
     wavelength = wl0 * (wl1/wl0)**(i_even/d)
     freq = 1./wavelength
     
-    a = t[:, None] * 2*np.pi/wavelength
-    sin = embed[:, i_even] = a.sin()
-    cos = embed[:, i_odd] = a.cos()
+    a = t[..., None] * 2*np.pi/wavelength
+    sin = embed[..., i_even] = a.sin()
+    cos = embed[..., i_odd] = a.cos()
     
     if do_viz:
         plt.figure(figsize=(15, 5))
