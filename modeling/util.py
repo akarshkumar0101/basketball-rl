@@ -2,6 +2,8 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
+import copy
+
 def fourier_pos(tmin, tmax, t=None, d=512, do_viz=False):
     if t is None:
         t = torch.linspace(tmin, tmax, 1024)
@@ -41,3 +43,30 @@ def sliding_window(n_window, n_total):
     for i in range(n_window):
         idxs.append(torch.arange(n_total-n_window+1)+i)
     return torch.stack(idxs).T
+
+def index_data_dict(data, mask):
+    data = copy.copy(data)
+    for key, value in data.items():
+        if isinstance(value, torch.Tensor):
+            data[key] = value[mask]
+    return data
+
+def print_data_dict(data):
+    for key, value in data.items():
+        print(f'{key}: {value.shape}', end=' | ')
+    print(); print()
+    
+def dict_list2list_dict(data):
+    ans = []
+    listlen = len(list(data.values())[0])
+    for i in range(listlen):
+        ans.append({key: value[i] for key, value in data.items()})
+    return ans
+
+def list_dict2dict_list(data):
+    ans = {}
+    
+    for key in data[0].keys():
+        ans[key] = [di[key] for di in data]
+    
+    return ans

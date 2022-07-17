@@ -9,17 +9,6 @@ from constants import max_speed_ball, max_speed_human
 from util import sliding_window
 import copy
 
-def index_data_dict(data, mask):
-    data = copy.copy(data)
-    for key, value in data.items():
-        if isinstance(value, torch.Tensor):
-            data[key] = value[mask]
-    return data
-def print_data_dict(data):
-    for key, value in data.items():
-        print(f'{key}: {value.shape}', end=' | ')
-    print(); print()
-    
 def init_ds(game, dg):
     idx_inp_xy = 2
     idx_inp_v = 1
