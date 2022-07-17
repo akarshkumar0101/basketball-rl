@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 def fourier_pos(tmin, tmax, t=None, d=512, do_viz=False):
     if t is None:
         t = torch.linspace(tmin, tmax, 1024)
-    i = torch.arange(d)
+    i = torch.arange(d).to(t.device)
     i_even = i[::2]
     i_odd = i[1::2]
     
-    embed = torch.zeros(*t.shape, d)
+    embed = torch.zeros(*t.shape, d).to(t.device)
     
     wl0 = 2*np.pi *     1 * (tmax-tmin) / 1024
     wl1 = 2*np.pi * 10000 * (tmax-tmin) / 1024

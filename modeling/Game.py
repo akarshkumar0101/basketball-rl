@@ -26,5 +26,13 @@ class Game:
         self.events = [Event(event) for event in pbar]
         self.player_ids_dict = self.events[0].player_ids_dict
         
+    def read_meta_data(self):
+        df = pd.read_json(self.path_to_json)
+        events = df['events']
+        self.home_team = Team(events[0]['home']['teamid'])
+        self.guest_team = Team(events[0]['visitor']['teamid'])
+        event = Event(events[0])
+        self.player_ids_dict = event.player_ids_dict
+        
     def start(self):
         self.event.show()
