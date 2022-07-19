@@ -44,13 +44,6 @@ def sliding_window(n_window, n_total):
         idxs.append(torch.arange(n_total-n_window+1)+i)
     return torch.stack(idxs).T
 
-def index_data_dict(data, mask):
-    data = copy.copy(data)
-    for key, value in data.items():
-        if isinstance(value, torch.Tensor):
-            data[key] = value[mask]
-    return data
-
 def print_data_dict(data):
     for key, value in data.items():
         print(f'{key}: {value.shape}', end=' | ')

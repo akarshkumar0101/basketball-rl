@@ -8,6 +8,7 @@ import torch
 import util
 
 from constants import max_speed_ball, max_speed_human
+import torch_dict
 
 class MetaBasketballData():
     def __init__(self):
@@ -195,7 +196,7 @@ def event2moments(events, mask=True, verbose=False):
         for key, value in masks.items():
             print(f"Mask {key:>20} removes {value.sum().item():>10}/{len(ds['x']):>10} frames.")
     if mask:
-        ds = util.index_data_dict(ds, ~masks['mask_total'])
+        ds = torch_dict.index(ds, ~masks['mask_total'])
     return ds
 
 def process_data_dir(dir_input='data_small', dir_output='data_processed', tqdm=None):
