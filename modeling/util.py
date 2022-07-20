@@ -13,8 +13,8 @@ def fourier_pos(tmin, tmax, t=None, d=512, do_viz=False):
     
     embed = torch.zeros(*t.shape, d).to(t.device)
     
-    wl0 = 2*np.pi *     1 * (tmax-tmin) / 1024
-    wl1 = 2*np.pi * 10000 * (tmax-tmin) / 1024
+    wl0 = 2*np.pi *     1 * (tmax-tmin) / 1024 # smallest wavelength
+    wl1 = 2*np.pi * 10000 * (tmax-tmin) / 1024 # largest wavelength
     wavelength = wl0 * (wl1/wl0)**(i_even/d)
     freq = 1./wavelength
     

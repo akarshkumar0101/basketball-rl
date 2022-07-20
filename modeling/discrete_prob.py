@@ -1,5 +1,12 @@
 import numpy as np
 
+# def unravel_index(index, shape):
+#     out = []
+#     for dim in reversed(shape):
+#         out.append(index % dim)
+#         index = index // dim
+#     return tuple(reversed(out))
+
 class DiscretizeContinuousSpace():
     def __init__(self, start_point, end_point, n_bins):
         self.p1, self.p2 = start_point, end_point
@@ -18,7 +25,6 @@ class DiscretizeContinuousSpace():
         idx = np.moveaxis(np.stack(idx), 0, -1)
         v = (idx+.5)/self.n_bins*(self.p2-self.p1)+self.p1
         return v
-    
     
 # to visualize:
 

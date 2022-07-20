@@ -18,15 +18,16 @@ class MLP(nn.Module):
         return self.net(x)
     
 class ModelNet(nn.Module):
-    def __init__(self, game, n_inputs=13, n_outputs=3, embed_dim=60, n_heads=4, mlp_dim=100, n_layers=5, dropout=0.0, residual=True):
+    def __init__(self, mbd, n_inputs=13, n_outputs=3, embed_dim=60, n_heads=4, mlp_dim=100, n_layers=5, dropout=0.0, residual=True):
         super().__init__()
         # position either xyz or fourier
         # team either one hot concatenated or fourier added/concatenated
         # playerid either one hot concatenated or fourier added/concatenated
+        self.mbd = mbd
         
         self.n_inputs = n_inputs
-        self.embed_team = nn.Embedding(len(game.team2onehot), n_inputs)
-        self.embed_player = nn.Embedding(len(game.pid2onehot), n_inputs)
+        self.embed_team = nn.Embedding(len(mbd.team_id2data), n_inputs)
+        self.embed_player = nn.Embedding(len(mbd.player_id2data), n_inputs)
         
         self.lin_in = nn.Linear(n_inputs, embed_dim)
         self.residual = residual
@@ -38,7 +39,7 @@ class ModelNet(nn.Module):
         self.norms2 = nn.ModuleList([nn.LayerNorm(embed_dim) for _ in range(n_layers)])
         
         self.lin_out = nn.Linear(embed_dim, n_outputs)
-       
+        
     def calc_fourier_features(self, x):
         if self.n_inputs%3!=0:
             raise ValueError(f'n_inputs: {self.n_inputs} is not divisible by 3')
@@ -46,15 +47,24 @@ class ModelNet(nn.Module):
                        util.fourier_pos(0, 50, x[..., 1], d=self.n_inputs//3),
                        util.fourier_pos(0, 20, x[..., 2], d=self.n_inputs//3)], dim=-1)
         return x
-        
-        
+    
+    def id2ohid(self, ids, id2data):
+        """
+        Converts a tensor of ids into a tensor of ohids by using the mapping id->id2data[id]['ohid']
+        """
+        ohid = ids.clone()
+        for key in id2data:
+            ohid[ids==key] = id2data[key]['ohid']
+        return ohid
+    
     def forward(self, x, id_team=None, id_player=None):
         x = self.calc_fourier_features(x)
         
+        device = x.device
         if id_team is not None:
-            x = x + self.embed_team(id_team)
+            x = x + self.embed_team(self.id2ohid(id_team, self.mbd.team_id2data))
         if id_player is not None:
-            x = x + self.embed_player(id_player)
+            x = x + self.embed_player(self.id2ohid(id_player, self.mbd.player_id2data))
         
         x = self.lin_in(x)
         

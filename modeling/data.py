@@ -218,3 +218,20 @@ def process_data_dir(dir_input='data_small', dir_output='data_processed', tqdm=N
                 continue
             file = f"{dir_output}/{gameid:010d}_{i_event:05d}.pth"
             torch.save(moments, file)
+
+def data_loader(data_dir='data_processed', batch_size=100, load_factor=10, tqdm=None):
+    files = np.array([file for file in os.listdir(data_dir) if file.endswith('.pth')])
+    files = files[np.random.permutation(len(files))]
+    
+    load_size = batch_size*load_factor
+    # load files until reaching load size
+    load_data = []
+    for file in files if tqdm is None else tqdm(files):
+        load_data.append(torch.load(data_dir+'/'+file))
+        n_moments = np.sum([a['x'].shape[0] for a in load_data])
+        if n_moments>load_size: # reached it
+            load_data = torch_dict.cat(load_data, dim=0)
+            load_data = torch_dict.index(load_data, torch.randperm(n_moments))
+            for i_batch, batch in enumerate(torch_dict.split(load_data, batch_size, dim=0)):
+                yield batch
+            load_data = []
