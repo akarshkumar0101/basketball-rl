@@ -2,6 +2,16 @@ import copy
 
 import torch
 
+def to(data, *args, **kwargs):
+    """
+    Moves dictionary of torch Tensors using torch.to
+    """
+    data = copy.copy(data)
+    for key, value in data.items():
+        if isinstance(value, torch.Tensor):
+            data[key] = value.to(*args, **kwargs)
+    return data
+
 def index(data, idx):
     """
     Indexes into a dictionary of torch Tensors

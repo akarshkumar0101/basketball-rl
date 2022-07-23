@@ -1,6 +1,11 @@
 import numpy as np
 
+import torch
+
 # def unravel_index(index, shape):
+#     """
+#     https://discuss.pytorch.org/t/how-to-do-a-unravel-index-in-pytorch-just-like-in-numpy/12987/3
+#     """
 #     out = []
 #     for dim in reversed(shape):
 #         out.append(index % dim)
@@ -9,22 +14,41 @@ import numpy as np
 
 class DiscretizeContinuousSpace():
     def __init__(self, start_point, end_point, n_bins):
-        self.p1, self.p2 = start_point, end_point
-        self.n_bins = n_bins
-        print(self.p1, self.p2, self.n_bins)
+        """
+        start_point.shape is (d, ) of type float indicating lower bound.
+        end_point.shape is (d, ) of type float indicating upper bound.
+        n_bins.shape is (d, ) of type int indicated number of bins in each dimension.
+        """
+        self.p1, self.p2 = np.array(start_point), np.array(end_point)
+        self.n_bins = np.array(n_bins)
+        # print(self.p1, self.p2, self.n_bins)
 
     def vec2bin(self, v):
-        v = (v-self.p1)/(self.p2-self.p1)*self.n_bins
-        idx = v.astype(int).clip(0, self.n_bins-1)
-        idx = np.moveaxis(idx, -1, 0)
-        idx = np.ravel_multi_index(tuple(idx), self.n_bins)
+        """
+        v.shape is (..., d) where n_bins.shape is (d, )
+        output.shape is (...,) indicating the flattened bin idxs.
+        """
+        v = (v-self.p1)/(self.p2-self.p1)*self.n_bins # normalize to scale 0-n_bins[i] in each dimension i
+        idx = v.astype(int).clip(0, self.n_bins-1) # take int and clip to get bin idxs in each dimension
+        idx = np.moveaxis(idx, -1, 0) # move the vector dimension to the front so I can tuple it
+        idx = np.ravel_multi_index(tuple(idx), self.n_bins) # convert tuple of indices into flattened bins
         return idx
     
+    def vec2bin_torch(self, v):
+        return torch.from_numpy(self.vec2bin(v.numpy()))
+    
     def bin2vec(self, idx):
+        """
+        idx.shape is (...,) indicating the flattened bin idxs.
+        output.shape is (..., d) indicating the center vector of that bin idx
+        """
         idx = np.unravel_index(idx, self.n_bins)
         idx = np.moveaxis(np.stack(idx), 0, -1)
         v = (idx+.5)/self.n_bins*(self.p2-self.p1)+self.p1
         return v
+    
+    def bin2vec_torch(self, idx):
+        return torch.from_numpy(self.bin2vec(idx.numpy()))
     
 # to visualize:
 

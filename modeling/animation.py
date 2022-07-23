@@ -1,14 +1,26 @@
 
 import numpy as np
+import cv2
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
+
+import torch
 
 from Constant import Constant
 
 import constants_ui
 
+img_court = plt.imread('court.png')
+img_court = cv2.resize(img_court, (94, 50), interpolation=cv2.INTER_AREA)
+
+def hex_to_rgb(hexa):
+    """
+    https://stackoverflow.com/questions/29643352/converting-hex-to-rgb-value-in-python
+    """
+    return tuple(int(hexa[i:i+2], 16)  for i in (0, 2, 4))
+
 class BasketballAnimation():
-    def __init__(self, mbd, x, id_team, id_player, t, figsize=(8, 6), img_court_res=None):
+    def __init__(self, mbd, x, id_team, id_player, t, figsize=(8, 6)):
         self.fig = plt.figure(figsize=figsize)
         self.ax = plt.axes(xlim=(Constant.X_MIN, Constant.X_MAX-Constant.DIFF),
                            ylim=(Constant.Y_MIN, Constant.Y_MAX))
@@ -67,7 +79,6 @@ class BasketballAnimation():
                          # fargs=(self.circles,),
                          frames=len(x), interval=20, blit=True,
                          repeat=True)
-        img_court = plt.imread("court.png")
         plt.imshow(img_court, zorder=0, extent=[Constant.X_MIN, Constant.X_MAX - Constant.DIFF, Constant.Y_MAX, Constant.Y_MIN])
         
     def animation_init(self):
@@ -102,3 +113,38 @@ class BasketballAnimation():
     #     ball_circle.center = moment.ball.x, moment.ball.y
     #     ball_circle.radius = moment.ball.radius / Constant.NORMALIZATION_COEF
     #     return circles, ball_circle
+
+
+def create_video(mbd, x, id_team, id_player, dark_background=0.5, flip=False, int_dtype=True, tqdm=None, **kwargs):
+    x = x.round().to(int)
+    vid = img_court
+    # vid = np.zeros((len(x), 94+1, 50+1, 3))
+    vid = np.tile(img_court[None], (len(x), 1, 1, 1))*dark_background
+    
+    for i_frame in range(len(x)) if tqdm is None else tqdm(range(len(x))):
+        for i_player in range(len(x[i_frame])-1, -1, -1):
+            xi, yi, zi = x[i_frame, i_player].tolist()
+            id_team_i = id_team[i_frame, i_player].item()
+            id_player_i = id_team[i_frame, i_player].item()
+            color = constants_ui.team_id2color[id_team_i]
+            color = np.array(hex_to_rgb(color[1:]))/255.
+            cv2.circle(vid[i_frame], (xi, yi), 1, color, -1)
+    
+    vid = torch.from_numpy(vid).permute(0, 3, 1, 2)
+    if flip:
+        vid = vid.flip(-2)
+    if int_dtype:
+        vid = (vid*255).to(torch.uint8)
+    return vid
+
+def stitch_videos(list_vids, shape):
+    """
+    list_vids should be a list of videos of shape (T, 3, H, W)
+    
+    shape should be a 2-tuple with numbers whose product=len(list_vids)
+    """
+    vids = np.empty(shape, dtype=object)
+    vids.ravel()[:] = list_vids
+    
+    vids = torch.cat([torch.cat(list(row), -1) for row in vids], -2)
+    return vids

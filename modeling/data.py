@@ -28,11 +28,12 @@ class MetaBasketballData():
     def add_team(self, data_team):
         data_team = copy.copy(data_team)
         data_team['id'] = data_team['teamid']
-        data_team['ohid'] = len(self.team_id2data)
+        data_team['ohid'] = self.team_id2data[data_team['id']]['ohid'] if data_team['id'] in self.team_id2data else len(self.team_id2data) 
 
         for data_player in data_team['players']:
             self.add_player(data_player, data_team['id'])
 
+        # TODO change code to where it adds new players, not resets the whole list based on this game's roster
         data_team['id_players'] = [player['playerid'] for player in data_team['players']]
         del data_team['players'], data_team['teamid']
         self.team_id2data[data_team['id']] = data_team
@@ -40,12 +41,12 @@ class MetaBasketballData():
     def add_player(self, data_player, id_team):
         data_player = copy.copy(data_player)
         data_player['id'] = data_player['playerid']
-        data_player['ohid'] = len(self.player_id2data)
+        data_player['ohid'] = self.player_id2data[data_player['id']]['ohid'] if data_player['id'] in self.player_id2data else len(self.player_id2data) 
         data_player['id_team'] = id_team
         del data_player['playerid']
 
-        if data_player['id'] in self.player_id2data and data_player['id_team'] != self.player_id2data[data_player['id']]['id_team']:
-            raise Exception('Duplicate Player on different team!')
+        # if data_player['id'] in self.player_id2data and data_player['id_team'] != self.player_id2data[data_player['id']]['id_team']:
+            # raise Exception('Duplicate Player on different team!')
 
         self.player_id2data[data_player['id']] = data_player
         
@@ -203,18 +204,20 @@ def process_data_dir(dir_input='data_small', dir_output='data_processed', tqdm=N
     mbd = MetaBasketballData()
     pbar = [dir_input+'/'+file for file in os.listdir(dir_input) if file.endswith('.json')]
     for path in pbar if tqdm is None else tqdm(pbar):
-        print(f'Processing Game: {path}')
+        # print(f'Processing Game: {path}')
         df = pd.read_json(path)
         mbd.add_game(df)
         
         torch.save(mbd, f"{dir_output}/mbd")
         
-        events = game_df2events(df, verbose=False, tqdm=tqdm)
+        events = game_df2events(df, verbose=False, tqdm=None)
         gameid = df['gameid'][0]
         
         for i_event, event in enumerate(events):
+            if event['x'].shape[0]<10:
+                continue
             moments = event2moments(event, mask=True, verbose=False)
-            if moments['x'].shape[0]==0: # this might be zero because mask_t_shot_nan or mask_dt_shot_bad removes everything... sad
+            if moments['x'].shape[0]<10: # this might be zero because mask_t_shot_nan or mask_dt_shot_bad removes everything... sad
                 continue
             file = f"{dir_output}/{gameid:010d}_{i_event:05d}.pth"
             torch.save(moments, file)
