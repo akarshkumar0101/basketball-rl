@@ -10,6 +10,7 @@ import numpy as np
 import scipy.signal
 import xarray as xr
 
+import cv2
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
 

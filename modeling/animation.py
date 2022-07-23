@@ -8,8 +8,8 @@ from Constant import Constant
 import constants_ui
 
 class BasketballAnimation():
-    def __init__(self, mbd, x, id_team, id_player, t):
-        self.fig = plt.figure(figsize=(8, 6))
+    def __init__(self, mbd, x, id_team, id_player, t, figsize=(8, 6), img_court_res=None):
+        self.fig = plt.figure(figsize=figsize)
         self.ax = plt.axes(xlim=(Constant.X_MIN, Constant.X_MAX-Constant.DIFF),
                            ylim=(Constant.Y_MIN, Constant.Y_MAX))
         self.x, self.id_team, self.id_player = x, id_team, id_player
