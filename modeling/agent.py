@@ -92,3 +92,4 @@ class ModelNet(nn.Module):
         
         # return x.tanh()*4.
         return x
+    
